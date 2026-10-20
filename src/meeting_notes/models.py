@@ -2,11 +2,15 @@ import datetime
 
 from pydantic import BaseModel
 
+SPEAKER_ME = "Я"
+SPEAKER_THEM = "Собеседники"
+
 
 class Segment(BaseModel):
     start: float
     end: float
     text: str
+    speaker: str | None = None
 
 
 class TranscriptMeta(BaseModel):

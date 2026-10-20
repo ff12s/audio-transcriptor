@@ -1,5 +1,5 @@
 from meeting_notes.models import Segment
-from meeting_notes.paragraphs import merge_segments
+from meeting_notes.paragraphs import interleave, merge_segments
 
 
 def seg(start: float, end: float, text: str) -> Segment:
@@ -29,3 +29,34 @@ def test_drops_empty_and_strips_text() -> None:
 
 def test_empty_input() -> None:
     assert merge_segments([]) == []
+
+
+def test_merge_does_not_cross_speakers() -> None:
+    segs = [
+        Segment(start=0, end=3, text="а", speaker="Я"),
+        Segment(start=3, end=6, text="б", speaker="Собеседники"),
+    ]
+    assert [s.text for s in merge_segments(segs)] == ["а", "б"]
+
+
+def test_merge_same_speaker_still_merges() -> None:
+    segs = [
+        Segment(start=0, end=3, text="а", speaker="Я"),
+        Segment(start=3, end=6, text="б", speaker="Я"),
+    ]
+    assert [(s.text, s.speaker) for s in merge_segments(segs)] == [("а б", "Я")]
+
+
+def test_interleave_orders_by_start() -> None:
+    me = [Segment(start=5, end=6, text="m", speaker="Я")]
+    them = [
+        Segment(start=1, end=2, text="t1", speaker="Собеседники"),
+        Segment(start=7, end=8, text="t2", speaker="Собеседники"),
+    ]
+    assert [s.text for s in interleave(me, them)] == ["t1", "m", "t2"]
+
+
+def test_interleave_is_stable_for_equal_start() -> None:
+    me = [Segment(start=1, end=2, text="m", speaker="Я")]
+    them = [Segment(start=1, end=2, text="t", speaker="Собеседники")]
+    assert [s.text for s in interleave(me, them)] == ["m", "t"]

@@ -15,13 +15,18 @@ dependencies = [
     "pydantic-settings",
     "nvidia-cublas-cu12 ; sys_platform == 'win32'",
     "nvidia-cudnn-cu12>=9,<10 ; sys_platform == 'win32'",
+    "proc-tap ; sys_platform == 'win32'",
+    "soundcard ; sys_platform == 'win32'",
+    "psutil ; sys_platform == 'win32'",
+    "scipy",
 ]
 
 [project.scripts]
 transcribe = "meeting_notes.cli:app"
+record = "meeting_notes.cli:record_app"
 
 [dependency-groups]
-dev = ["pytest", "ruff", "mypy"]
+dev = ["pytest", "ruff", "mypy", "types-psutil"]
 
 [build-system]
 requires = ["hatchling"]
@@ -42,7 +47,7 @@ strict = true
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["faster_whisper.*", "ctranslate2.*", "nvidia.*"]
+module = ["faster_whisper.*", "ctranslate2.*", "nvidia.*", "soundcard.*", "proctap.*", "scipy.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
