@@ -307,7 +307,7 @@ def test_model_download_failure_has_disk_and_network_hint(
 
 
 def test_cuda_runtime_error_during_model_load_keeps_cuda_handling(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prepare_calls: list[int]
 ) -> None:
     error = RuntimeError("CUDA failed with error out of memory")
 
@@ -317,8 +317,12 @@ def test_cuda_runtime_error_during_model_load_keeps_cuda_handling(
     _install_model(monkeypatch, make_model)
     audio = tmp_path / "a.mp3"
     audio.write_bytes(b"x")
-    with WhisperTranscriber(Settings(device="cpu"), None) as t, pytest.raises(CudaOutOfMemoryError):
+    with (
+        WhisperTranscriber(Settings(device="cuda"), None) as t,
+        pytest.raises(CudaOutOfMemoryError) as info,
+    ):
         t.transcribe(audio)
+    assert "int8_float16" in str(info.value)
 
 
 class _ConnectError(Exception):
@@ -326,7 +330,10 @@ class _ConnectError(Exception):
 
 
 def _load_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: Exception
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+    settings: Settings | None = None,
 ) -> MeetingNotesError:
     def make_model(*_a: Any, **_k: Any) -> Any:
         raise error
@@ -335,7 +342,7 @@ def _load_failure(
     audio = tmp_path / "a.mp3"
     audio.write_bytes(b"x")
     with (
-        WhisperTranscriber(Settings(device="cpu"), None) as t,
+        WhisperTranscriber(settings or Settings(device="cpu"), None) as t,
         pytest.raises(MeetingNotesError) as info,
     ):
         t.transcribe(audio)
@@ -372,11 +379,138 @@ def test_compute_type_value_error_keeps_settings_hint(
     assert "свободное место" not in message
 
 
-def test_cuda_error_of_any_class_during_model_load_is_cuda_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def _assert_plain_load_failure(error: MeetingNotesError, original: Exception) -> None:
+    assert not isinstance(error, CudaUnavailableError | CudaOutOfMemoryError)
+    message = str(error)
+    assert str(original) in message
+    assert "свободное место" in message
+    assert "MEETING_NOTES_MODEL_DIR" in message
+    assert "int8_float16" not in message
+    assert "nvidia-cublas-cu12" not in message
+
+
+def test_non_runtime_error_on_cuda_device_is_load_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prepare_calls: list[int]
 ) -> None:
     error = _ConnectError("cudnn64_9.dll is not found")
-    assert isinstance(_load_failure(tmp_path, monkeypatch, error), CudaUnavailableError)
+    result = _load_failure(tmp_path, monkeypatch, error, Settings(device="cuda"))
+    _assert_plain_load_failure(result, error)
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("spelling", ["native", "posix", "backslash", "upper"])
+@pytest.mark.parametrize("error_type", [OSError, _ConnectError, RuntimeError])
+def test_cuda_in_model_dir_is_load_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    prepare_calls: list[int],
+    device: str,
+    spelling: str,
+    error_type: type[Exception],
+) -> None:
+    model_dir = tmp_path / "cuda-models"
+    shown = {
+        "native": str(model_dir),
+        "posix": model_dir.as_posix(),
+        "backslash": str(model_dir).replace("/", "\\"),
+        "upper": str(model_dir).upper(),
+    }[spelling]
+    error = error_type(f"Cannot write to {shown}: connection reset")
+    settings = Settings(device=device, model_dir=model_dir)
+    _assert_plain_load_failure(_load_failure(tmp_path, monkeypatch, error, settings), error)
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("error_type", [OSError, _ConnectError, RuntimeError])
+def test_cuda_in_repo_id_is_load_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    prepare_calls: list[int],
+    device: str,
+    error_type: type[Exception],
+) -> None:
+    settings = Settings(device=device, model="org/whisper-cuda-ct2")
+    error = error_type("Connection error while fetching ORG/Whisper-CUDA-CT2")
+    _assert_plain_load_failure(_load_failure(tmp_path, monkeypatch, error, settings), error)
+
+
+def test_real_cuda_marker_is_found_despite_cuda_in_model_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prepare_calls: list[int]
+) -> None:
+    model_dir = tmp_path / "cuda-models"
+    error = RuntimeError(f"Library cublas64_12.dll is not found near {model_dir}")
+    settings = Settings(device="cuda", model_dir=model_dir)
+    assert isinstance(_load_failure(tmp_path, monkeypatch, error, settings), CudaUnavailableError)
+
+
+def test_cuda_in_hf_cache_folder_is_load_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prepare_calls: list[int]
+) -> None:
+    settings = Settings(device="cuda", model="org/whisper-cuda-ct2")
+    snapshot = settings.model_dir / "models--org--whisper-cuda-ct2" / "snapshots" / "abc"
+    error = RuntimeError(f"Unable to open file 'model.bin' in model '{snapshot}'")
+    _assert_plain_load_failure(_load_failure(tmp_path, monkeypatch, error, settings), error)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "CUDA failed with error no CUDA-capable device is detected",
+        "Could not locate cudnn_ops64_9.dll",
+        "CUDA driver version is insufficient for CUDA runtime version",
+    ],
+)
+def test_cuda_signature_is_driver_hint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prepare_calls: list[int], text: str
+) -> None:
+    result = _load_failure(tmp_path, monkeypatch, RuntimeError(text), Settings(device="cuda"))
+    assert isinstance(result, CudaUnavailableError)
+
+
+def test_short_model_dir_does_not_erase_cuda_marker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prepare_calls: list[int]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    error = RuntimeError("CUDA driver version is insufficient for CUDA runtime version")
+    settings = Settings(device="cuda", model_dir=Path("cuda"))
+    assert isinstance(_load_failure(tmp_path, monkeypatch, error, settings), CudaUnavailableError)
+
+
+def test_out_of_memory_on_cpu_is_load_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    error = RuntimeError("std::bad_alloc: out of memory")
+    _assert_plain_load_failure(_load_failure(tmp_path, monkeypatch, error), error)
+
+
+def test_cudnn_runtime_error_on_cuda_device_is_driver_hint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prepare_calls: list[int]
+) -> None:
+    error = RuntimeError("Library cudnn_ops64_9.dll is not found")
+    result = _load_failure(tmp_path, monkeypatch, error, Settings(device="cuda"))
+    assert isinstance(result, CudaUnavailableError)
+    assert str(error) in str(result)
+
+
+def test_bad_cuda_device_string_has_settings_hint_not_driver_hint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prepare_calls: list[int]
+) -> None:
+    error = ValueError("unsupported device cuda:0")
+    result = _load_failure(tmp_path, monkeypatch, error, Settings(device="cuda:0"))
+    assert not isinstance(result, CudaUnavailableError)
+    assert "MEETING_NOTES_DEVICE" in str(result)
+    assert "MEETING_NOTES_COMPUTE_TYPE" in str(result)
+    assert str(error) in str(result)
+
+
+def test_device_word_in_repo_id_is_not_device_hint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = Settings(device="cpu", model="org/device-whisper")
+    error = ValueError("Repo id org/device-whisper not found")
+    result = _load_failure(tmp_path, monkeypatch, error, settings)
+    assert "свободное место" in str(result)
+    assert "MEETING_NOTES_COMPUTE_TYPE" not in str(result)
 
 
 def test_keyboard_interrupt_during_model_load_propagates(

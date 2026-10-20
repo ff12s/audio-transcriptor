@@ -12,15 +12,35 @@ from meeting_notes.config import Settings
 from meeting_notes.errors import CudaOutOfMemoryError, CudaUnavailableError, MeetingNotesError
 from meeting_notes.models import Segment, Transcript, TranscriptMeta
 
-_CUDA_MARKERS = ("cuda", "cublas", "cudnn")
+# Сигнатуры CUDA-рантайма и загрузки его DLL; голое «cuda» не годится: оно встречается
+# в путях и именах моделей.
+_CUDA_SIGNATURES = re.compile(
+    r"cuda (failed|error|driver)|cuda_error|no cuda[- ]capable device"
+    r"|cudnn\w*\.dll|cudnn\w*64_\d+|cublas\w*\.dll|cublas\w*64_\d+"
+    r"|cudnn_status|cublas_status|cuda runtime|could not (load|locate).*(cudnn|cublas)",
+    re.IGNORECASE,
+)
 _DEVICE_MARKERS = ("compute type", "compute_type", "device")
-# Ровно один '/', без диска, ведущей точки и обратных слэшей: иначе опечатка в локальном пути
-# ушла бы в Hugging Face и дала бы невнятную ошибку загрузки.
+# Ровно один '/', без диска и обратных слэшей, имя владельца не начинается с точки: иначе
+# опечатка в локальном пути ушла бы в Hugging Face и дала бы невнятную ошибку загрузки.
 _HF_REPO_ID = re.compile(r"[A-Za-z0-9][\w.-]*/[\w.-]+")
+# Короче этого значение (например, MEETING_NOTES_MODEL_DIR=cuda) стёрло бы из сообщения
+# настоящие маркеры ошибки.
+_MIN_STRIPPED_LEN = 6
 
 
-def _is_cuda_failure(message: str) -> bool:
-    return "out of memory" in message or any(marker in message for marker in _CUDA_MARKERS)
+def _without_user_text(message: str, settings: Settings) -> str:
+    # Библиотеки подставляют в сообщения путь к моделям и id репозитория, а huggingface_hub
+    # кладёт модель в каталог «models--org--name»; в них может встретиться «device» или
+    # «cuda», не связанное с причиной сбоя.
+    model_dir = str(settings.model_dir)
+    spellings = {model_dir, model_dir.replace("\\", "/"), model_dir.replace("/", "\\")}
+    spellings.add(settings.model)
+    spellings.add("models--" + settings.model.replace("/", "--"))
+    for text in sorted(spellings, key=len, reverse=True):
+        if len(text) >= _MIN_STRIPPED_LEN:
+            message = re.sub(re.escape(text), " ", message, flags=re.IGNORECASE)
+    return message
 
 
 @contextmanager
@@ -34,15 +54,18 @@ def _decode_errors(audio: Path) -> Iterator[None]:
         ) from exc
 
 
-def _cuda_failure_error(exc: Exception) -> MeetingNotesError | None:
-    message = str(exc).lower()
+def _cuda_failure_error(exc: Exception, settings: Settings) -> MeetingNotesError | None:
+    # ctranslate2 сообщает об ошибках CUDA-рантайма как RuntimeError.
+    if not (settings.device.startswith("cuda") and isinstance(exc, RuntimeError)):
+        return None
+    message = _without_user_text(str(exc), settings).lower()
     if "out of memory" in message:
         return CudaOutOfMemoryError(
             f"Не хватило видеопамяти GPU: {exc}. Закройте другие приложения, "
             "использующие GPU, задайте MEETING_NOTES_COMPUTE_TYPE=int8_float16 "
             "или выберите модель поменьше (--model)."
         )
-    if _is_cuda_failure(message):
+    if _CUDA_SIGNATURES.search(message):
         return CudaUnavailableError(
             f"Ошибка CUDA: {exc}. Проверьте драйвер NVIDIA и пакеты "
             "nvidia-cublas-cu12 / nvidia-cudnn-cu12 (`uv sync`)."
@@ -51,24 +74,23 @@ def _cuda_failure_error(exc: Exception) -> MeetingNotesError | None:
 
 
 @contextmanager
-def _cuda_errors() -> Iterator[None]:
+def _cuda_errors(settings: Settings) -> Iterator[None]:
     try:
         yield
     except RuntimeError as exc:
-        error = _cuda_failure_error(exc)
+        error = _cuda_failure_error(exc, settings)
         if error is None:
             raise
         raise error from exc
 
 
 def _model_load_error(exc: Exception, settings: Settings) -> MeetingNotesError:
-    # Классификация по тексту, а не по классу: сетевой слой huggingface_hub (httpx2) бросает
-    # исключения вне OSError, а HFValidationError наследует ValueError, как и ошибки ctranslate2.
-    if (cuda_error := _cuda_failure_error(exc)) is not None:
-        return cuda_error
+    # Порядок проверок: ValueError про device/compute_type (по тексту без пути и имени модели),
+    # затем CUDA/OOM, только для device cuda* и RuntimeError, иначе ошибка загрузки.
+    # Исключения загрузки не ограничены OSError (huggingface_hub 2.2.0 ходит через httpx2).
     name = settings.model
     if isinstance(exc, ValueError) and any(
-        marker in str(exc).lower() for marker in _DEVICE_MARKERS
+        marker in _without_user_text(str(exc), settings).lower() for marker in _DEVICE_MARKERS
     ):
         return MeetingNotesError(
             f"Модель {name!r} не удалось запустить с device={settings.device!r}, "
@@ -76,6 +98,8 @@ def _model_load_error(exc: Exception, settings: Settings) -> MeetingNotesError:
             "MEETING_NOTES_DEVICE и MEETING_NOTES_COMPUTE_TYPE "
             "(например, для cpu нужен int8)."
         )
+    if (cuda_error := _cuda_failure_error(exc, settings)) is not None:
+        return cuda_error
     return MeetingNotesError(
         f"Не удалось загрузить модель {name!r} в {settings.model_dir}: "
         f"{type(exc).__name__}: {exc}. Проверьте свободное место на диске, сеть, "
@@ -159,7 +183,7 @@ class WhisperTranscriber:
             )
 
     def transcribe(self, audio: Path) -> Transcript:
-        with _cuda_errors():
+        with _cuda_errors(self._settings):
             model = self._load_model()
             self._check_language(model)
             with _decode_errors(audio):
@@ -174,7 +198,7 @@ class WhisperTranscriber:
         # вне защищённых блоков, иначе его сбой выглядел бы как ошибка декодирования.
         segment_iter = iter(raw_segments)
         while True:
-            with _cuda_errors(), _decode_errors(audio):
+            with _cuda_errors(self._settings), _decode_errors(audio):
                 raw = next(segment_iter, None)
             if raw is None:
                 break
