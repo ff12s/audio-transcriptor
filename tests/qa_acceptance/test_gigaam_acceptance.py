@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from meeting_notes import cuda_setup
+from meeting_notes.asr import cuda_setup
 from meeting_notes.errors import CudaUnavailableError, MeetingNotesError
 
 _MODEL = "gigaam-v3-e2e-rnnt"
@@ -93,7 +93,7 @@ def _audio(tmp_path: Path) -> Path:
 def test_transcribe_maps_results_to_stripped_segments_meta_and_progress(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from meeting_notes.gigaam import GigaamTranscriber
+    from meeting_notes.asr.gigaam import GigaamTranscriber
 
     waveform = np.zeros(64000, dtype=np.float32)
     _install(
@@ -122,7 +122,7 @@ def test_transcribe_maps_results_to_stripped_segments_meta_and_progress(
 def test_auto_with_cuda_runs_prepare_then_preload_then_loads_on_cuda(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from meeting_notes.gigaam import GigaamTranscriber
+    from meeting_notes.asr.gigaam import GigaamTranscriber
 
     fakes = _install(
         monkeypatch,
@@ -147,7 +147,7 @@ def test_auto_with_cuda_runs_prepare_then_preload_then_loads_on_cuda(
 def test_auto_falls_back_to_cpu_when_cuda_is_unusable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from meeting_notes.gigaam import GigaamTranscriber
+    from meeting_notes.asr.gigaam import GigaamTranscriber
 
     fakes = _install(
         monkeypatch,
@@ -166,7 +166,7 @@ def test_auto_falls_back_to_cpu_when_cuda_is_unusable(
 def test_dml_uses_dml_provider_with_cpu_fallback_and_skips_cuda_setup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from meeting_notes.gigaam import GigaamTranscriber
+    from meeting_notes.asr.gigaam import GigaamTranscriber
 
     fakes = _install(
         monkeypatch,
@@ -183,7 +183,7 @@ def test_dml_uses_dml_provider_with_cpu_fallback_and_skips_cuda_setup(
 def test_model_load_failure_becomes_chained_meeting_notes_error_with_hints(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from meeting_notes.gigaam import GigaamTranscriber
+    from meeting_notes.asr.gigaam import GigaamTranscriber
 
     error = RuntimeError("weights are corrupted")
     _install(
@@ -211,7 +211,7 @@ def test_model_load_failure_becomes_chained_meeting_notes_error_with_hints(
 
 
 def test_check_config_rejects_ctranslate2_device_string() -> None:
-    from meeting_notes.gigaam import check_config
+    from meeting_notes.asr.gigaam import check_config
 
     with pytest.raises(MeetingNotesError) as info:
         check_config(_MODEL, "cuda:0", "ru")
@@ -226,7 +226,7 @@ def test_check_config_rejects_ctranslate2_device_string() -> None:
 def test_empty_waveform_skips_recognition_and_gives_empty_transcript(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from meeting_notes.gigaam import GigaamTranscriber
+    from meeting_notes.asr.gigaam import GigaamTranscriber
 
     fakes = _install(
         monkeypatch,
@@ -244,7 +244,7 @@ def test_empty_waveform_skips_recognition_and_gives_empty_transcript(
 def test_model_is_loaded_once_and_reloaded_after_exit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from meeting_notes.gigaam import GigaamTranscriber
+    from meeting_notes.asr.gigaam import GigaamTranscriber
 
     fakes = _install(
         monkeypatch,

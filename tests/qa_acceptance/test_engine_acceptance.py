@@ -89,7 +89,7 @@ def test_whisper_engine_normalises_auto_device_and_builds_glossary_prompt(
     tmp_path: Path, calls: list[tuple[Any, Any]]
 ) -> None:
     from meeting_notes import cli
-    from meeting_notes.glossary import build_prompt
+    from meeting_notes.asr.glossary import build_prompt
 
     (tmp_path / "glossary.txt").write_text("Kubernetes\nTerraform\n", encoding="utf-8")
 

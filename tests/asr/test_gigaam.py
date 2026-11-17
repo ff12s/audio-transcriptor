@@ -6,9 +6,9 @@ from typing import Any
 
 import pytest
 
-from meeting_notes import cuda_setup, gigaam
+from meeting_notes.asr import cuda_setup, gigaam
+from meeting_notes.asr.gigaam import DEVICES, GigaamTranscriber, check_config
 from meeting_notes.errors import CudaUnavailableError, MeetingNotesError
-from meeting_notes.gigaam import DEVICES, GigaamTranscriber, check_config
 
 _MODEL = "gigaam-v3-e2e-rnnt"
 _CPU = "CPUExecutionProvider"

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from meeting_notes.glossary import (
+from meeting_notes.asr.glossary import (
     PROMPT_WARN_CHARS,
     build_prompt,
     is_prompt_too_long,

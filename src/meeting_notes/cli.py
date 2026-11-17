@@ -9,11 +9,18 @@ from rich.console import Console
 from rich.markup import escape
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TimeElapsedColumn
 
+from meeting_notes.asr import (
+    GigaamTranscriber,
+    Transcriber,
+    WhisperTranscriber,
+    build_prompt,
+    check_config,
+    is_prompt_too_long,
+    load_glossary,
+)
 from meeting_notes.capture import AppSource, CallRecorder, MicSource
 from meeting_notes.config import Settings
 from meeting_notes.errors import MeetingNotesError
-from meeting_notes.gigaam import GigaamTranscriber, check_config
-from meeting_notes.glossary import build_prompt, is_prompt_too_long, load_glossary
 from meeting_notes.pipeline import (
     CallTranscriptionPipeline,
     MetaOverrides,
@@ -24,7 +31,6 @@ from meeting_notes.pipeline import (
 from meeting_notes.processes import check_windows_build, current_windows_build, find_capture_pids
 from meeting_notes.renderer import TranscriptRenderer, format_timecode
 from meeting_notes.track import TrackWriter
-from meeting_notes.transcriber import Transcriber, WhisperTranscriber
 
 app = typer.Typer(add_completion=False)
 record_app = typer.Typer(add_completion=False)

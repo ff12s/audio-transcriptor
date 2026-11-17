@@ -6,10 +6,10 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any
 
-from meeting_notes import cuda_setup
+from meeting_notes.asr import cuda_setup
+from meeting_notes.asr.transcriber import _decode_errors
 from meeting_notes.errors import CudaUnavailableError, MeetingNotesError
 from meeting_notes.models import Segment, Transcript, TranscriptMeta
-from meeting_notes.transcriber import _decode_errors
 
 _CPU = "CPUExecutionProvider"
 _ACCELERATORS = {

@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
 
+from meeting_notes.asr import Transcriber
 from meeting_notes.errors import MeetingNotesError, OutputExistsError
 from meeting_notes.models import SPEAKER_ME, SPEAKER_THEM, Segment, Transcript
 from meeting_notes.output import output_path_for, write_output
 from meeting_notes.paragraphs import interleave
 from meeting_notes.renderer import TranscriptRenderer
-from meeting_notes.transcriber import Transcriber
 
 _FALLBACK_ATTEMPTS = 100
 

@@ -5,12 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from meeting_notes import cuda_setup
+from meeting_notes.asr import cuda_setup
 from meeting_notes.errors import CudaUnavailableError
 
 
 @pytest.fixture(autouse=True)
-def fresh_state(monkeypatch: pytest.MonkeyPatch) -> None:
+def fresh_state(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> None:
+    # pytest ветвится по sys.platform при создании basetemp; создаём его до подмены платформы.
+    tmp_path_factory.getbasetemp()
     monkeypatch.setattr(cuda_setup, "_prepared", False)
     monkeypatch.setattr(cuda_setup, "_added_dirs", set())
     monkeypatch.setattr(cuda_setup, "_dll_handles", [])

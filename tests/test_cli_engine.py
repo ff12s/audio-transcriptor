@@ -6,9 +6,9 @@ import pytest
 from typer.testing import CliRunner
 
 from meeting_notes import cli
+from meeting_notes.asr.gigaam import GigaamTranscriber
+from meeting_notes.asr.transcriber import WhisperTranscriber
 from meeting_notes.config import Settings
-from meeting_notes.gigaam import GigaamTranscriber
-from meeting_notes.transcriber import WhisperTranscriber
 from tests.conftest import FakeTranscriber
 
 runner = CliRunner()
