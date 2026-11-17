@@ -89,6 +89,7 @@ def _audio(tmp_path: Path) -> Path:
     audio.write_bytes(b"x")
     return audio
 
+
 def test_transcribe_maps_results_to_stripped_segments_meta_and_progress(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -117,6 +118,7 @@ def test_transcribe_maps_results_to_stripped_segments_meta_and_progress(
     assert transcript.meta.duration == expected_duration
     assert progress == [(2.5, expected_duration), (4.0, expected_duration)]
 
+
 def test_auto_with_cuda_runs_prepare_then_preload_then_loads_on_cuda(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -141,6 +143,7 @@ def test_auto_with_cuda_runs_prepare_then_preload_then_loads_on_cuda(
     assert not (model_dir / _MODEL).exists()
     assert not (model_dir / "silero-vad").exists()
 
+
 def test_auto_falls_back_to_cpu_when_cuda_is_unusable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -159,6 +162,7 @@ def test_auto_falls_back_to_cpu_when_cuda_is_unusable(
     assert "preload_dlls" not in fakes.events
     assert [s.text for s in transcript.segments] == ["a"]
 
+
 def test_dml_uses_dml_provider_with_cpu_fallback_and_skips_cuda_setup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -174,6 +178,7 @@ def test_dml_uses_dml_provider_with_cpu_fallback_and_skips_cuda_setup(
         t.transcribe(_audio(tmp_path))
     assert fakes.model_calls[0][2] == ["DmlExecutionProvider", "CPUExecutionProvider"]
     assert "prepare_cuda" not in fakes.events
+
 
 def test_model_load_failure_becomes_chained_meeting_notes_error_with_hints(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -204,6 +209,7 @@ def test_model_load_failure_becomes_chained_meeting_notes_error_with_hints(
     assert "MEETING_NOTES_DEVICE=cpu" in message
     assert info.value.__cause__ is error
 
+
 def test_check_config_rejects_ctranslate2_device_string() -> None:
     from meeting_notes.gigaam import check_config
 
@@ -215,6 +221,7 @@ def test_check_config_rejects_ctranslate2_device_string() -> None:
         assert value in message
     assert "MEETING_NOTES_DEVICE" in message
     assert "--engine whisper" in message
+
 
 def test_empty_waveform_skips_recognition_and_gives_empty_transcript(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -232,6 +239,7 @@ def test_empty_waveform_skips_recognition_and_gives_empty_transcript(
     assert fakes.recognize_calls == 0
     assert transcript.segments == []
     assert transcript.meta.duration == 0.0
+
 
 def test_model_is_loaded_once_and_reloaded_after_exit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

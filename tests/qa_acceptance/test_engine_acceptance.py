@@ -57,6 +57,7 @@ def _patch_record(monkeypatch: pytest.MonkeyPatch, build: int) -> list[str]:
     monkeypatch.setattr(cli, "build_recorder", build_recorder)
     return recorders
 
+
 def test_default_engine_is_gigaam_without_prompt(
     tmp_path: Path, calls: list[tuple[Any, Any]]
 ) -> None:
@@ -70,6 +71,7 @@ def test_default_engine_is_gigaam_without_prompt(
     assert settings.gigaam_model == "gigaam-v3-e2e-rnnt"
     assert prompt is None
 
+
 def test_gigaam_run_ignores_glossary_and_prints_engine_line(tmp_path: Path) -> None:
     from meeting_notes import cli
 
@@ -81,6 +83,7 @@ def test_gigaam_run_ignores_glossary_and_prints_engine_line(tmp_path: Path) -> N
     assert "Глоссарий" not in result.output
     assert "Whisper" not in result.output
     assert "Движок: gigaam" in result.output
+
 
 def test_whisper_engine_normalises_auto_device_and_builds_glossary_prompt(
     tmp_path: Path, calls: list[tuple[Any, Any]]
@@ -99,6 +102,7 @@ def test_whisper_engine_normalises_auto_device_and_builds_glossary_prompt(
     assert settings.model == "large-v3"
     assert prompt == build_prompt(["Kubernetes", "Terraform"])
 
+
 def test_whisper_engine_keeps_explicit_ctranslate2_device_string(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, calls: list[tuple[Any, Any]]
 ) -> None:
@@ -112,6 +116,7 @@ def test_whisper_engine_keeps_explicit_ctranslate2_device_string(
     assert result.exit_code == 0, result.output
     ((settings, _prompt),) = calls
     assert settings.device == "cuda:0"
+
 
 def test_unknown_engine_is_rejected_before_transcription(
     tmp_path: Path, calls: list[tuple[Any, Any]]
@@ -130,6 +135,7 @@ def test_unknown_engine_is_rejected_before_transcription(
     assert calls == []
     assert not audio.with_suffix(".md").exists()
 
+
 def test_ctranslate2_device_string_is_rejected_under_default_engine(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, calls: list[tuple[Any, Any]]
 ) -> None:
@@ -144,6 +150,7 @@ def test_ctranslate2_device_string_is_rejected_under_default_engine(
     assert "MEETING_NOTES_DEVICE" in flat
     assert "--engine whisper" in flat
     assert calls == []
+
 
 def test_record_rejects_unknown_engine_before_recording(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -160,6 +167,7 @@ def test_record_rejects_unknown_engine_before_recording(
     assert recorders == []
     assert list(tmp_path.glob("*.wav")) == []
     assert list(tmp_path.glob("*.md")) == []
+
 
 def test_record_reports_settings_error_before_windows_build_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
