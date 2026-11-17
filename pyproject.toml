@@ -1,7 +1,7 @@
 [project]
 name = "meeting-notes"
 version = "0.1.0"
-description = "Локальная транскрипция записей встреч в Markdown через faster-whisper"
+description = "Локальная транскрипция записей встреч в Markdown через GigaAM (onnx-asr) или faster-whisper"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -19,7 +19,15 @@ dependencies = [
     "soundcard ; sys_platform == 'win32'",
     "psutil ; sys_platform == 'win32'",
     "scipy",
+    "onnx-asr[hub]",
+    "onnxruntime-gpu[cuda,cudnn] ; sys_platform == 'win32'",
 ]
+
+# faster-whisper requires the CPU `onnxruntime` package, which installs the same `onnxruntime`
+# module as onnxruntime-gpu; the override keeps it off Windows. A uv override replaces the
+# requirement entirely, so faster-whisper's own bound (>=1.14,<2) is repeated here.
+[tool.uv]
+override-dependencies = ["onnxruntime>=1.14,<2 ; sys_platform != 'win32'"]
 
 [project.scripts]
 transcribe = "meeting_notes.cli:app"
@@ -47,7 +55,7 @@ strict = true
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["faster_whisper.*", "ctranslate2.*", "nvidia.*", "soundcard.*", "proctap.*", "scipy.*"]
+module = ["faster_whisper.*", "ctranslate2.*", "nvidia.*", "soundcard.*", "proctap.*", "scipy.*", "onnx_asr.*", "onnxruntime.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
