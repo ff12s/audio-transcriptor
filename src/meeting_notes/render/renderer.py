@@ -1,7 +1,7 @@
 import json
 
 from meeting_notes.models import Transcript
-from meeting_notes.paragraphs import merge_segments
+from meeting_notes.render.paragraphs import merge_segments
 
 
 def format_timecode(seconds: float, with_hours: bool) -> str:

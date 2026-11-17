@@ -13,7 +13,7 @@ from meeting_notes.pipeline import (
     TranscriptionPipeline,
     check_call_outputs,
 )
-from meeting_notes.renderer import TranscriptRenderer
+from meeting_notes.render.renderer import TranscriptRenderer
 from tests.conftest import FakeTranscriber
 
 

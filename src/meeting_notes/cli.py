@@ -36,7 +36,7 @@ from meeting_notes.recording import (
     current_windows_build,
     find_capture_pids,
 )
-from meeting_notes.renderer import TranscriptRenderer, format_timecode
+from meeting_notes.render import TranscriptRenderer, format_timecode
 
 app = typer.Typer(add_completion=False)
 record_app = typer.Typer(add_completion=False)

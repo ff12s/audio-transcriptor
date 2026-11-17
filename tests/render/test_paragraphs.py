@@ -1,5 +1,5 @@
 from meeting_notes.models import Segment
-from meeting_notes.paragraphs import interleave, merge_segments
+from meeting_notes.render.paragraphs import interleave, merge_segments
 
 
 def seg(start: float, end: float, text: str) -> Segment:

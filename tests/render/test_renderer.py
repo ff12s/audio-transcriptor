@@ -3,7 +3,7 @@ import datetime
 import pytest
 
 from meeting_notes.models import Segment, Transcript, TranscriptMeta
-from meeting_notes.renderer import TranscriptRenderer, format_timecode
+from meeting_notes.render.renderer import TranscriptRenderer, format_timecode
 
 
 @pytest.mark.parametrize(
