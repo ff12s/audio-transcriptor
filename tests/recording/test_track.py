@@ -7,7 +7,7 @@ import numpy.typing as npt
 import pytest
 
 from meeting_notes.errors import OutputExistsError
-from meeting_notes.track import SOURCE_RATE, TRACK_RATE, ClockedTrack, TrackWriter
+from meeting_notes.recording.track import SOURCE_RATE, TRACK_RATE, ClockedTrack, TrackWriter
 
 
 def sine(freq: float, seconds: float, amp: float = 0.5) -> npt.NDArray[np.float32]:
@@ -26,8 +26,8 @@ def rms(pcm: npt.NDArray[np.int16]) -> float:
 
 
 LATENCY = 0.5
-# Начало метки определяется с точностью до миллисекунд (задержка фильтра ~0.7 мс), а промах
-# старого кода равен задержке в 0.5 с и больше: десятой доли задержки хватает с большим запасом.
+# Начало метки определяется с точностью до миллисекунд (задержка фильтра ~0.7 мс), а сбой
+# выравнивания даёт сдвиг не меньше задержки в 0.5 с: десятой доли задержки хватает с запасом.
 TOL = LATENCY / 10
 STEP = SOURCE_RATE // 10
 

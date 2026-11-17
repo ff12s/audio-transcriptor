@@ -1,8 +1,8 @@
 import pytest
 
-from meeting_notes import processes
 from meeting_notes.errors import MeetingNotesError
-from meeting_notes.processes import (
+from meeting_notes.recording import processes
+from meeting_notes.recording.processes import (
     MIN_WINDOWS_BUILD,
     ProcInfo,
     check_windows_build,

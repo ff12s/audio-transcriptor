@@ -8,15 +8,15 @@ import numpy as np
 import numpy.typing as npt
 import pytest
 
-from meeting_notes.capture import (
+from meeting_notes.errors import MeetingNotesError
+from meeting_notes.recording.capture import (
     AppSource,
     CallRecorder,
     MicSource,
     SourceWarning,
     _pcm_to_block,
 )
-from meeting_notes.errors import MeetingNotesError
-from meeting_notes.track import SOURCE_RATE, TRACK_RATE, TrackWriter
+from meeting_notes.recording.track import SOURCE_RATE, TRACK_RATE, TrackWriter
 
 Block = npt.NDArray[np.float32]
 BLOCK_FRAMES = SOURCE_RATE // 20
@@ -260,7 +260,7 @@ def test_app_exit_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr("proctap.ProcessAudioCapture", Capture)
     monkeypatch.setattr("psutil.pid_exists", lambda _pid: False)
-    monkeypatch.setattr("meeting_notes.capture._ALIVE_CHECK_SECONDS", 0.01)
+    monkeypatch.setattr("meeting_notes.recording.capture._ALIVE_CHECK_SECONDS", 0.01)
     errors: list[Exception] = []
     got = threading.Event()
     source = AppSource(1234)

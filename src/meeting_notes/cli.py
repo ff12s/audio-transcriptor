@@ -18,7 +18,6 @@ from meeting_notes.asr import (
     is_prompt_too_long,
     load_glossary,
 )
-from meeting_notes.capture import AppSource, CallRecorder, MicSource
 from meeting_notes.config import Settings
 from meeting_notes.errors import MeetingNotesError
 from meeting_notes.pipeline import (
@@ -28,9 +27,16 @@ from meeting_notes.pipeline import (
     call_paths,
     check_call_outputs,
 )
-from meeting_notes.processes import check_windows_build, current_windows_build, find_capture_pids
+from meeting_notes.recording import (
+    AppSource,
+    CallRecorder,
+    MicSource,
+    TrackWriter,
+    check_windows_build,
+    current_windows_build,
+    find_capture_pids,
+)
 from meeting_notes.renderer import TranscriptRenderer, format_timecode
-from meeting_notes.track import TrackWriter
 
 app = typer.Typer(add_completion=False)
 record_app = typer.Typer(add_completion=False)

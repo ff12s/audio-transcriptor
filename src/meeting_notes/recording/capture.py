@@ -11,7 +11,7 @@ import numpy as np
 import numpy.typing as npt
 
 from meeting_notes.errors import MeetingNotesError
-from meeting_notes.track import SOURCE_RATE, ClockedTrack, TrackWriter
+from meeting_notes.recording.track import SOURCE_RATE, ClockedTrack, TrackWriter
 
 Block = npt.NDArray[np.float32]
 

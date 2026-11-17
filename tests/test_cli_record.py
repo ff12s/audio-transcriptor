@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 from meeting_notes import cli
 from meeting_notes.errors import MeetingNotesError
 from meeting_notes.models import Segment, Transcript
-from meeting_notes.track import TrackWriter
+from meeting_notes.recording.track import TrackWriter
 from tests.conftest import FakeTranscriber
 
 runner = CliRunner()
