@@ -264,7 +264,12 @@ def test_app_exit_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     errors: list[Exception] = []
     got = threading.Event()
     source = AppSource(1234)
-    source.start(lambda _b: None, lambda e: (errors.append(e), got.set()))
+
+    def on_error(e: Exception) -> None:
+        errors.append(e)
+        got.set()
+
+    source.start(lambda _b: None, on_error)
     assert got.wait(2)
     source.stop()
     assert "1234" in str(errors[0])
@@ -294,7 +299,12 @@ def test_mic_discontinuity_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     errors: list[Exception] = []
     got = threading.Event()
     mic = MicSource()
-    mic.start(lambda _b: None, lambda e: (errors.append(e), got.set()))
+
+    def on_error(e: Exception) -> None:
+        errors.append(e)
+        got.set()
+
+    mic.start(lambda _b: None, on_error)
     assert got.wait(2)
     mic.stop()
     assert "discontinuity" in str(errors[0])

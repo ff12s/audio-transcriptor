@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 from meeting_notes import cli
 from meeting_notes.errors import MeetingNotesError
 from meeting_notes.models import Segment, Transcript
+from meeting_notes.track import TrackWriter
 from tests.conftest import FakeTranscriber
 
 runner = CliRunner()
@@ -195,7 +196,7 @@ def test_unwritable_track_is_user_facing(
     def denied(self: object, path: Path) -> None:
         raise PermissionError(13, "Permission denied")
 
-    monkeypatch.setattr(cli.TrackWriter, "__init__", denied)
+    monkeypatch.setattr(TrackWriter, "__init__", denied)
     result = _invoke(str(tmp_path / "standup"), "--app", "chrome")
     assert result.exit_code == 1
     assert "Не удалось создать файл" in result.output
