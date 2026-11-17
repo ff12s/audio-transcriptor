@@ -12,6 +12,7 @@ from rich.progress import BarColumn, Progress, TaskProgressColumn, TimeElapsedCo
 from meeting_notes.capture import AppSource, CallRecorder, MicSource
 from meeting_notes.config import Settings
 from meeting_notes.errors import MeetingNotesError
+from meeting_notes.gigaam import GigaamTranscriber, check_config
 from meeting_notes.glossary import build_prompt, is_prompt_too_long, load_glossary
 from meeting_notes.pipeline import (
     CallTranscriptionPipeline,
@@ -38,8 +39,37 @@ def build_transcriber(
     initial_prompt: str | None,
     on_progress: Callable[[float, float], None],
 ) -> AbstractContextManager[Transcriber]:
-    # Единая точка подмены Whisper в тестах.
-    return WhisperTranscriber(settings, initial_prompt, on_progress)
+    # Единая точка подмены движка (Whisper или GigaAM) в тестах.
+    if settings.engine == "whisper":
+        return WhisperTranscriber(settings, initial_prompt, on_progress)
+    return GigaamTranscriber(
+        settings.gigaam_model, settings.model_dir, settings.device, on_progress
+    )
+
+
+_ENGINES = ("gigaam", "whisper")
+
+
+def _load_settings(engine: str | None, model: str | None) -> Settings:
+    settings = Settings()
+    if engine is not None:
+        settings.engine = engine
+    if settings.engine not in _ENGINES:
+        raise MeetingNotesError(
+            f"Неизвестный движок {settings.engine!r}: допустимы {' и '.join(_ENGINES)} "
+            "(--engine или MEETING_NOTES_ENGINE)."
+        )
+    if settings.engine == "gigaam":
+        if model is not None:
+            settings.gigaam_model = model
+        check_config(settings.gigaam_model, settings.device, settings.language)
+    else:
+        if model is not None:
+            settings.model = model
+        # ctranslate2 не знает "auto" в нашем смысле: для Whisper это cuda.
+        if settings.device == "auto":
+            settings.device = "cuda"
+    return settings
 
 
 def windows_build() -> int:
@@ -78,21 +108,21 @@ def _split_participants(raw: str | None) -> list[str] | None:
     return [p.strip() for p in raw.split(",") if p.strip()]
 
 
-def _transcribe(model: str | None, run: Callable[[Transcriber], Path]) -> Path:
-    settings = Settings()
-    if model is not None:
-        settings.model = model
-
-    terms = load_glossary(settings.glossary_path)
-    if not terms:
-        missing = escape(str(settings.glossary_path))
-        err.print(f"[yellow]Глоссарий пуст или не найден: {missing}[/yellow]")
-    prompt = build_prompt(terms)
-    if prompt is not None and is_prompt_too_long(prompt):
-        err.print(
-            "[yellow]Глоссарий длинный: Whisper использует только ~224 токена промпта, "
-            "остальное будет отброшено.[/yellow]"
-        )
+def _transcribe(settings: Settings, run: Callable[[Transcriber], Path]) -> Path:
+    prompt = None
+    if settings.engine == "whisper":
+        terms = load_glossary(settings.glossary_path)
+        if not terms:
+            missing = escape(str(settings.glossary_path))
+            err.print(f"[yellow]Глоссарий пуст или не найден: {missing}[/yellow]")
+        prompt = build_prompt(terms)
+        if prompt is not None and is_prompt_too_long(prompt):
+            err.print(
+                "[yellow]Глоссарий длинный: Whisper использует только ~224 токена промпта, "
+                "остальное будет отброшено.[/yellow]"
+            )
+    name = settings.gigaam_model if settings.engine == "gigaam" else settings.model
+    out.print(f"Движок: {escape(settings.engine)}, модель: {escape(name)}")
 
     columns = (
         *Progress.get_default_columns()[:1],
@@ -126,8 +156,11 @@ def main(
         typer.Option(formats=["%Y-%m-%d"], help="Дата встречи, YYYY-MM-DD."),
     ] = None,
     participants: Annotated[str | None, typer.Option(help="Участники через запятую.")] = None,
+    engine: Annotated[
+        str | None, typer.Option(help="Движок: gigaam или whisper (по умолчанию из конфига).")
+    ] = None,
     model: Annotated[
-        str | None, typer.Option(help="Модель Whisper (по умолчанию из конфига).")
+        str | None, typer.Option(help="Модель выбранного движка (по умолчанию из конфига).")
     ] = None,
     overwrite: Annotated[bool, typer.Option(help="Перезаписать существующий .md.")] = False,
 ) -> None:
@@ -138,8 +171,9 @@ def main(
         participants=_split_participants(participants),
     )
     try:
+        settings = _load_settings(engine, model)
         result = _transcribe(
-            model,
+            settings,
             lambda transcriber: TranscriptionPipeline(transcriber, TranscriptRenderer()).run(
                 file, overrides, overwrite
             ),
@@ -192,8 +226,11 @@ def record(
         typer.Option(formats=["%Y-%m-%d"], help="Дата встречи, YYYY-MM-DD."),
     ] = None,
     participants: Annotated[str | None, typer.Option(help="Участники через запятую.")] = None,
+    engine: Annotated[
+        str | None, typer.Option(help="Движок: gigaam или whisper (по умолчанию из конфига).")
+    ] = None,
     model: Annotated[
-        str | None, typer.Option(help="Модель Whisper (по умолчанию из конфига).")
+        str | None, typer.Option(help="Модель выбранного движка (по умолчанию из конфига).")
     ] = None,
     overwrite: Annotated[bool, typer.Option(help="Перезаписать существующий .md.")] = False,
     transcribe_only: Annotated[
@@ -211,6 +248,8 @@ def record(
         participants=_split_participants(participants),
     )
     try:
+        # Ошибка настроек не должна всплывать только после часа записи.
+        settings = _load_settings(engine, model)
         if not transcribe_only:
             check_windows_build(windows_build())
         check_call_outputs(base, overwrite, recording=not transcribe_only)
@@ -231,7 +270,7 @@ def record(
         )
         try:
             result = _transcribe(
-                model,
+                settings,
                 lambda transcriber: CallTranscriptionPipeline(
                     transcriber, TranscriptRenderer()
                 ).run(base, overrides, overwrite),
@@ -239,7 +278,7 @@ def record(
         except MeetingNotesError as exc:
             raise MeetingNotesError(f"{exc}\n{hint}") from exc
         except (Exception, KeyboardInterrupt):
-            # Ctrl+C или чужая ошибка (ctranslate2): стектрейс остаётся, подсказка добавляется.
+            # Ctrl+C или чужая ошибка (сбой движка): стектрейс остаётся, подсказка добавляется.
             err.print(escape(hint), soft_wrap=True)
             raise
     except MeetingNotesError as exc:
