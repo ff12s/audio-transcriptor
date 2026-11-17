@@ -1,22 +1,36 @@
 # meeting-notes
 
-Локальная CLI-утилита: транскрибирует запись рабочей встречи (аудио или видео) через
-faster-whisper (`large-v3`, CUDA) и сохраняет Markdown с frontmatter рядом с исходным файлом.
-Полученный `.md` можно отправить в Claude для конспекта. Сеть нужна только для первой загрузки модели.
+Локальная CLI-утилита: транскрибирует запись рабочей встречи (аудио или видео) и сохраняет
+Markdown с frontmatter рядом с исходным файлом. По умолчанию используется GigaAM v3 e2e-rnnt
+(`gigaam-v3-e2e-rnnt`, через onnx-asr, с Silero VAD для длинных записей); faster-whisper
+(`large-v3`) остаётся необязательным движком. Полученный `.md` можно отправить в Claude для
+конспекта. Сеть нужна только для первой загрузки моделей.
+
+GigaAM — русскоязычная модель: она сама расставляет пунктуацию и регистр, но английские термины
+пишет кириллицей и не принимает промпт, поэтому глоссарий к ней не применяется. На собственных
+встречах разработчика GigaAM восстановила фразы, которые Whisper пропустил (примерно на 2–3 %
+больше слов); около 110 минут аудио обработались примерно за 3 минуты на RTX 4070, а на CPU
+скорость составила порядка 14x реального времени с учётом загрузки модели. Проверялись только
+Windows 11 с NVIDIA и CPU; AMD, macOS и Linux разработчик не запускал.
 
 ## Установка
 
-Требуется драйвер NVIDIA (проверка: `nvidia-smi`) и [uv](https://docs.astral.sh/uv/).
+Требуется [uv](https://docs.astral.sh/uv/). Драйвер NVIDIA больше не обязателен: без него GigaAM
+работает на CPU. Для работы на GPU NVIDIA драйвер нужен (проверка: `nvidia-smi`).
 
 ```powershell
 uv python install 3.12
 uv sync
 ```
 
-На Windows `uv sync` ставит и CUDA-библиотеки pip-пакетами `nvidia-cublas-cu12` и
-`nvidia-cudnn-cu12` (cuDNN 9.x). Их DLL подключаются из кода через `os.add_dll_directory`
-(и в PATH текущего процесса), системный PATH не меняется. Отдельно ставить CUDA Toolkit не нужно.
-FFmpeg тоже не нужен: декодирование идёт через PyAV, в котором FFmpeg уже встроен.
+На Windows `uv sync` ставит `onnxruntime-gpu` вместе с CUDA-библиотеками (для GigaAM) и pip-пакеты
+`nvidia-cublas-cu12` и `nvidia-cudnn-cu12` (cuDNN 9.x, для Whisper). Их DLL подключаются из кода
+через `os.add_dll_directory` (и в PATH текущего процесса), системный PATH не меняется. Отдельно
+ставить CUDA Toolkit не нужно. FFmpeg тоже не нужен: декодирование идёт через PyAV, в котором
+FFmpeg уже встроен.
+
+На macOS и Linux `uv sync` ставит `onnxruntime` для CPU. Команда `transcribe` там работает,
+`record` остаётся только для Windows.
 
 ## Запуск
 
@@ -27,30 +41,43 @@ uv run transcribe "D:\records\planning.mp4" --title "Планирование с
 
 Результат: `D:\records\planning.md`. Если файл уже есть, утилита завершится с ошибкой
 до загрузки модели; для перезаписи добавьте `--overwrite`. Без `--date` берётся дата изменения
-файла, без `--title` — имя файла. `--model` переопределяет модель на один запуск; принимает имя из
-`faster_whisper.available_models()`, существующий каталог локальной модели CTranslate2 или id
-репозитория Hugging Face строго вида `org/name` (один `/`, без диска, ведущей точки и `\`). Любой
-другой путь с `/`, которого нет на диске, отклоняется как неизвестная модель.
+файла, без `--title` — имя файла.
+
+`--engine gigaam|whisper` выбирает движок на один запуск (по умолчанию `gigaam`).
+`--model` задаёт модель выбранного движка:
+
+- для GigaAM — имя вида `gigaam-*` (например, `gigaam-v3-e2e-rnnt`);
+- для Whisper (`--engine whisper`) — имя из `faster_whisper.available_models()`, существующий
+  каталог локальной модели CTranslate2 или id репозитория Hugging Face строго вида `org/name`
+  (один `/`, без диска, ведущей точки и `\`). Любой другой путь с `/`, которого нет на диске,
+  отклоняется как неизвестная модель.
+
+`--model large-v3`, когда движок не выбран как whisper (ни `--engine whisper`, ни
+`MEETING_NOTES_ENGINE=whisper`), — ошибка: имя не подходит для GigaAM.
+
+```powershell
+uv run transcribe "D:\records\planning.mp4" --engine whisper --model large-v3
+```
 
 ### Настройка через переменные окружения
 
 | Переменная                      | По умолчанию                 |
 |---------------------------------|------------------------------|
-| `MEETING_NOTES_MODEL`           | `large-v3`                   |
-| `MEETING_NOTES_DEVICE`          | `cuda`                       |
-| `MEETING_NOTES_COMPUTE_TYPE`    | `float16`                    |
-| `MEETING_NOTES_LANGUAGE`        | `ru`                         |
-| `MEETING_NOTES_MODEL_DIR`       | `D:\models\whisper`          |
-| `MEETING_NOTES_GLOSSARY_PATH`   | `glossary.txt` в корне репозитория |
+| `MEETING_NOTES_ENGINE`          | `gigaam`                     |
+| `MEETING_NOTES_GIGAAM_MODEL`    | `gigaam-v3-e2e-rnnt`         |
+| `MEETING_NOTES_MODEL` (только Whisper) | `large-v3`            |
+| `MEETING_NOTES_DEVICE`          | `auto`                       |
+| `MEETING_NOTES_COMPUTE_TYPE` (только Whisper) | `float16`      |
+| `MEETING_NOTES_LANGUAGE`        | `ru` (для GigaAM только `ru`) |
+| `MEETING_NOTES_MODEL_DIR`       | `D:\models\whisper` на Windows, `~/.cache/meeting-notes` на остальных системах |
+| `MEETING_NOTES_GLOSSARY_PATH`   | `glossary.txt` в корне репозитория (только Whisper) |
 
 Модели скачиваются в `MEETING_NOTES_MODEL_DIR` (каталог создаётся автоматически), а не в кэш
-Hugging Face на системном диске. Для `large-v3` нужно около 3 ГБ свободного места; при нехватке
-места или сбое сети утилита завершится с понятным сообщением.
-
-Без GPU: `MEETING_NOTES_DEVICE=cpu` и `MEETING_NOTES_COMPUTE_TYPE=int8` (CPU не поддерживает
-`float16`, CUDA-библиотеки при этом не проверяются). Если не хватает видеопамяти, закройте другие
-приложения на GPU, задайте `MEETING_NOTES_COMPUTE_TYPE=int8_float16` или выберите модель поменьше
-через `--model`.
+Hugging Face на системном диске. GigaAM и VAD лежат в `<MODEL_DIR>\<модель>` (например,
+`<MODEL_DIR>\gigaam-v3-e2e-rnnt`) и `<MODEL_DIR>\silero-vad`. Существующий каталог считается
+готовой локальной моделью, поэтому если загрузка прервалась, удалите этот подкаталог и запустите
+снова. Для Whisper `large-v3` нужно около 3 ГБ свободного места; при нехватке места или сбое сети
+утилита завершится с понятным сообщением.
 
 Если записать итоговый `.md` не удалось, утилита пробует сохранить готовый транскрипт рядом как
 `<имя>.<YYYYmmdd-HHMMSS>.md` (при совпадении имени добавляется `-1`, `-2`, ...); при успехе путь
@@ -58,7 +85,83 @@ Hugging Face на системном диске. Для `large-v3` нужно о
 говорит, а транскрипт не сохраняется. `--overwrite` заменяет файл
 атомарно: старый остаётся нетронутым, пока новый не записан полностью.
 
+### Устройства
+
+`MEETING_NOTES_DEVICE`:
+
+- `auto` (по умолчанию): GigaAM использует GPU NVIDIA, если он доступен, и CPU в остальных случаях
+  (GPU AMD и Intel, macOS, Linux). Для Whisper `auto` означает `cuda`.
+- `cpu` и `cuda` работают с обоими движками. `MEETING_NOTES_DEVICE=cuda` с GigaAM — способ
+  выяснить, почему GPU не выбран: вместо тихого перехода на CPU утилита завершится с причиной.
+- `dml` (DirectML, любой GPU с DX12) и `coreml` (macOS; не проверялось) — включаются явно и
+  только для GigaAM. Для `dml` замените пакет: `uv pip uninstall onnxruntime-gpu`, затем
+  `uv pip install onnxruntime-directml`, и запускайте через `uv run --no-sync transcribe ...`:
+  обычный `uv run` или `uv sync` вернёт `onnxruntime-gpu`. На машине разработчика `dml` не
+  оказался быстрее CPU.
+- Номер GPU вида `cuda:0` не поддерживается: GigaAM отклонит его сразу, Whisper (ctranslate2) —
+  при загрузке модели. Используйте `cuda`.
+
+Whisper без NVIDIA:
+
+```powershell
+$env:MEETING_NOTES_ENGINE = "whisper"
+$env:MEETING_NOTES_DEVICE = "cpu"
+$env:MEETING_NOTES_COMPUTE_TYPE = "int8"
+```
+
+CPU не поддерживает `float16`, CUDA-библиотеки при `cpu` не проверяются. Если Whisper не хватает
+видеопамяти, закройте другие приложения на GPU, задайте `MEETING_NOTES_COMPUTE_TYPE=int8_float16`
+или выберите модель поменьше через `--model`.
+
+### Если вы обновились
+
+Что изменилось по сравнению с версией только на Whisper:
+
+- движок по умолчанию теперь GigaAM;
+- `MEETING_NOTES_MODEL` и `MEETING_NOTES_COMPUTE_TYPE` относятся только к Whisper;
+- `MEETING_NOTES_DEVICE` по умолчанию `auto`; значения вида `cuda:N` не поддерживаются ни одним движком;
+- GigaAM принимает только `MEETING_NOTES_LANGUAGE=ru`;
+- глоссарий применяется только к Whisper.
+
+Чтобы вернуть прежнее поведение, задайте `MEETING_NOTES_ENGINE=whisper` или добавьте
+`--engine whisper`.
+
+## Запись созвона
+
+Команда `record` пишет звук одного приложения и микрофон в две дорожки и после Ctrl+C
+транскрибирует их в один `.md` с метками `Я` (микрофон) и `Собеседники` (приложение):
+
+```powershell
+uv run record --app chrome "D:\records\standup" --title "Стендап" --participants "Анна, Борис"
+```
+
+Результат: `standup.me.wav`, `standup.them.wav` (моно, 16 кГц) и `standup.md` со строками вида
+`[01:12] **Я:** Давайте начнём.`. Остальные флаги (`--title`, `--date`, `--participants`, `--engine`,
+`--model`, `--overwrite`) и настройки работают как у `transcribe`. Ошибки в имени движка, модели GigaAM,
+устройства и в языке выводятся до начала записи; доступность устройства и загрузка модели
+проверяются уже при транскрипции.
+
+- Нужна Windows 11 (технически API требует сборку 20348+, Windows 10 её не достигла); на более старой записи не будет, команда сообщит об этом.
+- `--app` задаёт имя процесса без учёта регистра, `.exe` можно не писать (`chrome`, `zoom`). В запись
+  попадает весь звук приложения и его дочерних процессов, поэтому для Chrome это все вкладки.
+  Звук других приложений (музыка и т. п.) не пишется.
+- Используйте наушники: если микрофон слышит динамики, реплики собеседников продублируются в `Я`.
+- Если процесса с таким именем нет, либо уже есть `.md` (без `--overwrite`) или дорожки с этим
+  именем, команда завершится ошибкой до начала записи. `--overwrite` перезаписывает только `.md`, дорожки он не трогает.
+- Дорожки пишутся на диск по ходу записи. Корректный WAV-заголовок гарантирован при Ctrl+C и
+  обработанных ошибках; при жёстком завершении процесса или потере питания заголовок дорожки может
+  остаться недописанным. Если транскрипция упала, сообщение содержит команду для повторного запуска
+  без записи:
+
+```powershell
+uv run record --transcribe-only "D:\records\standup"
+```
+
+`--transcribe-only` не записывает, а берёт существующие `.me.wav` и `.them.wav`.
+
 ## Глоссарий
+
+Глоссарий используется только движком Whisper; с GigaAM он игнорируется без сообщений.
 
 Файл `glossary.txt`: один термин на строку, строки с `#` и пустые игнорируются. Термины
 попадают в `initial_prompt` Whisper и помогают с названиями, аббревиатурами и именами:
@@ -81,4 +184,4 @@ uv run ruff check . ; uv run ruff format --check .
 uv run mypy src tests
 ```
 
-Тесты не запускают Whisper и не требуют GPU.
+Тесты не запускают ни Whisper, ни GigaAM и не требуют GPU.

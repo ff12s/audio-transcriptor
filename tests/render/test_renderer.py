@@ -3,7 +3,7 @@ import datetime
 import pytest
 
 from meeting_notes.models import Segment, Transcript, TranscriptMeta
-from meeting_notes.renderer import TranscriptRenderer, format_timecode
+from meeting_notes.render.renderer import TranscriptRenderer, format_timecode
 
 
 @pytest.mark.parametrize(
@@ -58,3 +58,8 @@ def test_short_recording_uses_mm_ss_and_empty_participants() -> None:
     assert "participants: []" in out
     assert 'duration: "00:01:30"' in out
     assert "\n[01:05] x\n" in out
+
+
+def test_render_with_speaker() -> None:
+    t = make(90.0, [Segment(start=72, end=75, text="Начнём", speaker="Я")], [])
+    assert "\n[01:12] **Я:** Начнём\n" in TranscriptRenderer().render(t)

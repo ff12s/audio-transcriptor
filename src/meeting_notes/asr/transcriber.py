@@ -7,7 +7,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any, Protocol
 
-from meeting_notes import cuda_setup
+from meeting_notes.asr import cuda_setup
 from meeting_notes.config import Settings
 from meeting_notes.errors import CudaOutOfMemoryError, CudaUnavailableError, MeetingNotesError
 from meeting_notes.models import Segment, Transcript, TranscriptMeta

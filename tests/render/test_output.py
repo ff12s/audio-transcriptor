@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from meeting_notes.errors import OutputExistsError
-from meeting_notes.output import write_output
+from meeting_notes.render.output import write_output
 
 
 def test_overwrite_replaces_content(tmp_path: Path) -> None:
